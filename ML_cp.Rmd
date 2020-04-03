@@ -1,0 +1,137 @@
+---
+title: "Coursera Machine Learning Project"
+author: "Xenia Sokolova"
+date: '2020, april 2 '
+output: html_document
+---
+
+
+
+
+## COURSERA MACHINE LEARNING PROJECT 
+## Weight Lifting Exercises Dataset
+
+## EXECUTIVE SUMMARY 
+
+We propose a dataset with 5 classes (sitting-down, standing-up, standing, walking, and sitting) collected on 8 hours of activities of 4 healthy subjects. The goal of the project is to predict the manner in which they did the exercise. 
+
+## BASIC EXPLORATORY DATA ANALYSIS
+
+Downloading r packages:
+```{r, cache=TRUE, echo=TRUE}
+library(readr)
+library(caret)
+library(randomForest)
+library(dplyr)
+```
+
+Loading data:
+```{r, cache=TRUE, echo=TRUE}
+setwd("C:/Users/xssok/Documents")
+download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv", 
+              "pml-training.csv")
+download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv", 
+              "pml-testing.csv")
+
+training_pml <-read.csv("pml-training.csv")
+testing_pml <- read.csv("pml-testing.csv")
+```
+
+Checking dimensions of the training and testing data:
+```{r, cache=TRUE, echo=TRUE}
+dim(training_pml)
+dim(testing_pml)
+```
+
+Cross validation:
+```{r, cache=TRUE, echo=TRUE}
+set.seed(1234)
+inTrain <- createDataPartition(y=training_pml$classe,
+                               p=0.6, list=FALSE)
+training <- training_pml[inTrain,] ## subset data into training set
+testing <- training_pml[-inTrain,] ## subset data into test set
+```
+
+Explore the training set:
+```{r, cache=TRUE, echo=TRUE}
+dim(training)
+
+dim(testing)
+
+str(training)
+
+table(training$classe)
+```
+
+## FEATURE SELECTION
+
+Exclude first 7 columns: "X", "user_name", "raw_timestamp_part_1", "raw_timestamp_part_2", "cvtd_timestamp", "new_window", "num_window", because we don't need them for the prediction.
+
+```{r, cache=TRUE, echo=TRUE}
+training_ex <- select(training, -(X:num_window))
+```
+
+Select variables with missing data (more than 95%) and exclude them from the data table:
+
+```{r, cache=TRUE, echo=TRUE}
+training_ex[training_ex==""] <- NA
+NArate <- apply(training_ex, 2, function(x) sum(is.na(x)))/nrow(training_ex)
+training_cl <- training_ex[!(NArate>0.95)]
+```
+
+Now we've got 53 variables:
+
+```{r, cache=TRUE, echo=TRUE}
+str(training_cl)
+```
+
+Applying PCA Since the number of variables are over 50:
+
+```{r, cache=TRUE, echo=TRUE}
+preProc <- preProcess(training_cl[,-53],method="pca",thresh=.8) #12 components to capture 80 percent of the variance 
+preProc
+preProc <- preProcess(training_cl[,-53],method="pca",thresh=.9) #18 components to capture 90 percent of the variance
+preProc
+preProc <- preProcess(training_cl[,-53],method="pca",thresh=.95) #24 components to capture 95 percent of the variance
+preProc
+preProc <- preProcess(training_cl[,-53],method="pca",pcaComp=24) 
+training_pca <- predict(preProc,training_cl[,-53])
+```
+
+## APPLYING A MODEL
+
+Our data have got non-bionominal outcome and large sample size, that's why we're using random forest method.
+
+```{r, cache=TRUE, echo=TRUE}
+modFit <- randomForest(training_cl$classe ~ .,   data=training_pca, do.trace=F)
+print(modFit) # view results
+```
+
+Checking on the test data:
+
+```{r, cache=TRUE, echo=TRUE}
+testing_cl <- select(testing, -(X:num_window))
+testing_cl[testing_cl==""] <- NA
+NArate <- apply(testing_cl, 2, function(x) sum(is.na(x)))/nrow(testing_cl)
+testing_cl <- testing_cl[!(NArate>0.95)]
+testing_pca <- predict(preProc,testing_cl[,-53])
+confusionMatrix(testing_cl$classe,predict(modFit,testing_pca))
+```
+
+## PREDICTING CLASSES FOR TEST DATA (SIZE OF 20)
+
+```{r, cache=TRUE, echo=TRUE}
+testing_pml_cl <- select(testing_pml, -(X:num_window))
+testing_pml_cl[testing_pml_cl==""] <- NA
+NArate <- apply(testing_pml_cl, 2, function(x) sum(is.na(x)))/nrow(testing_pml_cl)
+testing_pml_cl <- testing_pml_cl[!(NArate>0.95)]
+testing_pml_pca <- predict(preProc,testing_pml_cl[,-53])
+testing_pml_cl$classe <- predict(modFit,testing_pml_pca)
+cbind (as.character(testing_pml_cl$classe))
+```
+
+## CONCLUSION
+
+In this analyses, 19622 observations from weight lifting exercise were used to analyze and predict correct body movement from others during the exercise. 60% of the total observations (11776 observations) were used to build a model by random forest method, and the rest of 40% of the observations (7846 observations) were used for model validation (cross-validation). 
+The model statistics showed that the built model had the overall accuracy of 97% for the testing set, which is not overlapping with observations used to built the model. The sensitivity was in between 92%-99% and the specificity was over 99% for all classes.
+Overall, the model is well developed to predict the exercise classes during weight lifting. Therefore, under those condition, the model is expected to perform over 95% accuracy.
